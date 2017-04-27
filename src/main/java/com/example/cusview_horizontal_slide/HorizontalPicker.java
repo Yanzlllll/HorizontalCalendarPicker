@@ -42,10 +42,17 @@ public class HorizontalPicker extends LinearLayout implements View.OnTouchListen
 
     private List<PickerItem> items = new ArrayList<>();
     OnSelectionChangeListener changeListener;
-    private volatile int page;
+
+    //应记录的翻页数
+    private int page;
     // TODO: 2017/4/24 滑动到最侧端，实现数据切换
     private int screenWidth;
     private long clickTime;
+
+    private int PAGE_COUNT;
+    private int selectIndex;
+    //偏移量
+    private float offset;
 
     /**
      * Constructor
@@ -65,7 +72,8 @@ public class HorizontalPicker extends LinearLayout implements View.OnTouchListen
         initAttributes(context, attrs, defStyleAttr);
         this.setGravity(Gravity.CENTER_VERTICAL);
         WindowManager wm = (WindowManager) getContext().getSystemService(Context.WINDOW_SERVICE);
-        this.screenWidth = wm.getDefaultDisplay().getWidth();
+        screenWidth = wm.getDefaultDisplay().getWidth();
+        PAGE_COUNT = (screenWidth) / (getItemWidth() + 2 * getItemMargin());
     }
 
     /**
@@ -247,8 +255,8 @@ public class HorizontalPicker extends LinearLayout implements View.OnTouchListen
             case MotionEvent.ACTION_DOWN:
             case MotionEvent.ACTION_MOVE:
 
-                int n = (screenWidth - getItemMargin()) / (getItemWidth() + getItemMargin());
-                int x = (int) motionEvent.getX() + (n - 1) * page * (2 * getItemMargin() + getItemWidth());
+                //翻页后，重新定位当前的位移
+                int x = (int) (motionEvent.getX() - offset);
                 int y = (int) motionEvent.getY();
                 Rect hitRect = new Rect();
                 View v;
@@ -268,27 +276,12 @@ public class HorizontalPicker extends LinearLayout implements View.OnTouchListen
                 }
                 clickTime = System.currentTimeMillis();
                 int x1 = (int) motionEvent.getX();
-                int n1 = screenWidth / (getItemWidth() + 2 * getItemMargin());
+                Log.e("test", "PAGE_COUNT : " + PAGE_COUNT + '\n' + "getItems().size() / PAGE_COUNT:  " + getItems().size() / PAGE_COUNT + "\n" + "page：  " + page);
 
-                Log.e("test", "n1 : " + n1 + '\n' + "getItems().size() / n1:  " + getItems().size() / n1 + "\n" + "page：  " + page);
-                if (x1 > screenWidth - getItemWidth() && ((page+1) * (n1 - 1) < getItems().size())) {
-                    TranslateAnimation translate = new TranslateAnimation(0f, (1 - n1) * ++page * (2 * getItemMargin() + getItemWidth()), 0.0f, 0.0f);
-                    AnimationSet set = new AnimationSet(true);
-                    AlphaAnimation alpha = new AlphaAnimation(0.8f, 1.0f);
-                    set.addAnimation(alpha);
-                    set.addAnimation(translate);
-                    set.setFillAfter(true);
-                    set.setDuration(400);
-                    this.startAnimation(set);
-                } else if (x1 < getItemWidth() && page > 0) {
-                    TranslateAnimation translate = new TranslateAnimation((1 - n1) * page * (2 * getItemMargin() + getItemWidth()), (1 - n1) * --page * (2 * getItemMargin() + getItemWidth()), 0.0f, 0.0f);
-                    AnimationSet set = new AnimationSet(true);
-                    AlphaAnimation alpha = new AlphaAnimation(0.8f, 1.0f);
-                    set.addAnimation(alpha);
-                    set.addAnimation(translate);
-                    set.setFillAfter(true);
-                    set.setDuration(400);
-                    this.startAnimation(set);
+                if (x1 > screenWidth - getItemWidth() && getSelectedIndex() < getItems().size() - 1) {
+                    translate(offset, offset = (1 - PAGE_COUNT) * (2 * getItemMargin() + getItemWidth()) + offset);
+                } else if (x1 < getItemWidth() && getSelectedIndex() > 0) {
+                    translate(offset, offset = (PAGE_COUNT - 1) * (2 * getItemMargin() + getItemWidth()) + offset);
                 }
                 Log.e("test", "滑动的距离：x:" + x1 + ">>>屏幕抬起 page:" + page);
                 break;
@@ -315,7 +308,11 @@ public class HorizontalPicker extends LinearLayout implements View.OnTouchListen
             }
 
             if (changeListener != null)
-                changeListener.onItemSelect(this, selectedIndex);
+                try {
+                    changeListener.onItemSelect(this, selectedIndex);
+                } catch (ArrayIndexOutOfBoundsException e) {
+                    e.printStackTrace();
+                }
         }
     }
 
@@ -329,6 +326,7 @@ public class HorizontalPicker extends LinearLayout implements View.OnTouchListen
         this.items = items;
         initViews();
         selectChild(-1);
+
     }
 
     /**
@@ -340,6 +338,12 @@ public class HorizontalPicker extends LinearLayout implements View.OnTouchListen
      */
     public void setItems(List<PickerItem> items, int selectedIndex) {
         setItems(items);
+        if (selectedIndex > PAGE_COUNT) {
+            offset = (PAGE_COUNT / 2 - selectedIndex) * (2 * getItemMargin() + getItemWidth());
+            translate(0f, offset);
+        }
+        Log.e("test", "初始化page: " + page);
+        this.selectIndex = selectedIndex;
         selectChild(selectedIndex);
     }
 
@@ -433,4 +437,14 @@ public class HorizontalPicker extends LinearLayout implements View.OnTouchListen
         this.changeListener = changeListener;
     }
 
+    private void translate(float start, float end) {
+        TranslateAnimation translate = new TranslateAnimation(start, end, 0.0f, 0.0f);
+        AnimationSet set = new AnimationSet(true);
+        AlphaAnimation alpha = new AlphaAnimation(0.8f, 1.0f);
+        set.addAnimation(alpha);
+        set.addAnimation(translate);
+        set.setFillAfter(true);
+        set.setDuration(400);
+        this.startAnimation(set);
+    }
 }
